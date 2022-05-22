@@ -14,7 +14,7 @@ def main():
     path = "bert-base-uncased"
     tokenizer = BertTokenizer.from_pretrained(path)
     config = BertConfig.from_pretrained(path)
-    config.dropout_p = 0
+    # config.dropout_p = 0
     bmt_bert = Bert.from_pretrained(path, config=config)
 
     hug_bert = hugBert.from_pretrained(path).cuda().eval().half()

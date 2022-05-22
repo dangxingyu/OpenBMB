@@ -13,18 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from turtle import hideturtle
 import torch
-from ..layer import Encoder, Decoder, Embedding, Linear, RelativePositionEmbedding
+from ..layer import Encoder, Decoder, Embedding, Linear, LayerNorm
 from .basemodel import BaseModel
-from .config import T5Config
+from .config import BartConfig
 from transformers.modeling_outputs import Seq2SeqModelOutput
 
 
-class T5(BaseModel): 
+class Bart(BaseModel): 
 
-    _CONFIG_TYPE = T5Config
+    _CONFIG_TYPE = BartConfig
 
-    def __init__(self, config: T5Config):
+    def __init__(self, config: BartConfig):
         
         super().__init__()
 
@@ -53,6 +54,7 @@ class T5(BaseModel):
             length_scale = config.length_scale,
             attn_scale = config.attn_scale,
             dropout_p = config.dropout_p,
+            post_layer_norm=config.post_layer_norm,
         )
 
         self.decoder = Decoder(
@@ -78,6 +80,7 @@ class T5(BaseModel):
             length_scale = config.length_scale,
             attn_scale = config.attn_scale,
             dropout_p = config.dropout_p,
+            post_layer_norm=config.post_layer_norm,
         )
 
         self.input_embedding = Embedding(
@@ -90,24 +93,28 @@ class T5(BaseModel):
             init_std = config.emb_init_std,
         )
 
-        self.position_bias_enc = RelativePositionEmbedding(
-            num_heads = config.num_heads, 
-            num_buckets = config.position_bias_num_buckets, 
-            max_distance = config.position_bias_max_distance, 
-            bidirectional = True, 
+        self.enc_position_embedding = Embedding(
+            vocab_size = config.position_size + 2, 
+            # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
+            # and adjust num_embeddings appropriately. Other models don't have this hack
+            embedding_size = config.dim_model,
+            length_scale = config.length_scale,
             dtype = config.dtype,
-            init_mean = config.pos_init_mean,
-            init_std = config.pos_init_std,
+            int8 = config.int8,
+            init_mean = config.emb_init_mean,
+            init_std = config.emb_init_std,
         )
 
-        self.position_bias_dec = RelativePositionEmbedding(
-            num_heads = config.num_heads, 
-            num_buckets = config.position_bias_num_buckets, 
-            max_distance = config.position_bias_max_distance, 
-            bidirectional = False, 
+        self.dec_position_embedding = Embedding(
+            vocab_size = config.position_size + 2,
+            # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
+            # and adjust num_embeddings appropriately. Other models don't have this hack
+            embedding_size = config.dim_model,
+            length_scale = config.length_scale,
             dtype = config.dtype,
-            init_mean = config.pos_init_mean,
-            init_std = config.pos_init_std,
+            int8 = config.int8,
+            init_mean = config.emb_init_mean,
+            init_std = config.emb_init_std,
         )
 
         self.tied = config.tied
@@ -134,6 +141,7 @@ class T5(BaseModel):
                 init_std = config.proj_init_std,
                 bias = config.proj_bias,
             )
+            
 
     def forward(self, 
                 input_ids = None, # (batch, seq_enc)
@@ -142,6 +150,7 @@ class T5(BaseModel):
                 decoder_length = None, # (batch)
                 attention_mask = None, # (batch, seq_enc)
                 decoder_attention_mask = None, # (batch, seq_dec)
+                position_ids=None,
                 head_mask = None, # unused
                 decoder_head_mask = None, # unused
                 cross_attn_head_mask = None, # unused
@@ -153,7 +162,7 @@ class T5(BaseModel):
                 return_dict = True,
                 return_logits = False,
     ):
-        """ T5 is an encoder-decoder model and converts problems into a text-to-text format.
+        """ Bart is an encoder-decoder model and converts problems into a text-to-text format.
             This model inherits from BaseModel. This model is also a PyTorch torch.nn.Module subclass. You can use it as a regular PyTorch Module.
             You can also select the data and data type that you want the model to return through changing the value of `return_dict` and `return_logits`.
             
@@ -177,7 +186,6 @@ class T5(BaseModel):
 
         Return:
             Seq2SeqModelOutput or tuple or torch.Tensor of shape (batch, seq_dec, vocab_output_size) or (batch, seqlen, cls_head): The T5 output. Depended on the value of `return_dict` and `return_logits` 
-
         """    
         
         # encoder
@@ -200,9 +208,12 @@ class T5(BaseModel):
                     attention_mask = torch.arange(seq_enc, device=device)[None, :].repeat(batch, 1) < length[:, None]
                 # (batch, seq_enc, seq_enc)
                 enc_attention_mask = attention_mask.view(batch, seq_enc, 1) & attention_mask.view(batch, 1, seq_enc)
+                
+                if position_ids is None:
+                    position_ids = torch.arange(seq_enc, dtype=torch.int32, device=device)[None, :].repeat(batch, 1)
 
             # (num_heads, seq_enc, seq_enc)
-            enc_position_bias = self.position_bias_enc(seq_enc, seq_enc)
+            enc_position_embeds = self.enc_position_embedding(position_ids.to(torch.int32) + 2)
             
             # (batch, dim_model, seq_enc)
             if inputs_embeds is None:
@@ -210,9 +221,14 @@ class T5(BaseModel):
             else:
                 hidden_states_enc = inputs_embeds
 
+            # print("my input:", hidden_states_enc)
+            hidden_states_enc = hidden_states_enc + enc_position_embeds
+            
             # (batch, dim_model, seq_enc)
-            encoder_outputs = self.encoder(hidden_states_enc, enc_attention_mask, enc_position_bias)
-
+            encoder_outputs = self.encoder(hidden_states_enc, enc_attention_mask)
+            
+            # torch.set_printoptions(profile='full')
+            print("debug my encoder output:", encoder_outputs)
         # decoder
         assert decoder_input_ids is not None or decoder_inputs_embeds is not None
 
@@ -237,18 +253,19 @@ class T5(BaseModel):
             cross_attention_mask = attention_mask.view(batch, 1, seq_enc) & decoder_attention_mask.view(batch, seq_dec, 1)
 
         # (num_heads, seq_dec, seq_dec)
-        dec_position_bias = self.position_bias_dec(seq_dec, seq_dec)
+        dec_position_embeds = self.dec_position_embedding(position_ids.to(torch.int32))
 
         # (batch, seq_dec, dim_model)
         if decoder_inputs_embeds is None:
             hidden_states_dec = self.input_embedding(decoder_input_ids)
         else:
             hidden_states_dec = decoder_inputs_embeds
-        # (batch, seq_dec, dim_model)
-        decoder_outputs = self.decoder(hidden_states_dec, dec_attention_mask, dec_position_bias,
-                                       encoder_outputs, cross_attention_mask, None)
+        
+        hidden_states_dec = hidden_states_dec + dec_position_embeds
 
-        # (batch, seq_dec, vocab_output_size)
+        # (batch, seq_dec, dim_model)
+        decoder_outputs = self.decoder(hidden_states_dec, dec_attention_mask, None,
+                                       encoder_outputs, cross_attention_mask, None)
         if self.cls_head:
             logits = self.cls_projection(decoder_outputs)
         elif self.tied:
@@ -273,6 +290,5 @@ class T5(BaseModel):
                 encoder_attentions=None,
             )
 
-
 if __name__ == "__main__":
-    a = T5(T5Config())
+    a = Bart(BartConfig())

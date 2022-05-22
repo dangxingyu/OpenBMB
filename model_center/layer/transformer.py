@@ -45,6 +45,8 @@ class Encoder(torch.nn.Module):
         post_layer_norm (bool, optional): whether to use post-layernorm. Defaults to False, which means pre-layernorm.
         attn_scale (bool, optional): attn_scale used in in :py:class:`model_center.layer.Attention`. Defaults to False.
         dropout_p (float, optional): Defaults to 0.
+        attention_dropout (float, optional) : Dropout inside self_attn layer. Defaults to 0.
+        activation_dropout (float, optional): Dropout between fc1 and fc2. Defaults to 0.
     """
     def __init__(self, 
             num_layers : int,
@@ -70,6 +72,8 @@ class Encoder(torch.nn.Module):
             length_scale : bool = False,
             attn_scale : bool = False,
             dropout_p : float = 0,
+            attention_dropout : float = 0,
+            activation_dropout : float = 0,
             parallel_ffn : bool = False,
         ):
 
@@ -103,6 +107,8 @@ class Encoder(torch.nn.Module):
                     length_scale = length_scale,
                     attn_scale = attn_scale,
                     dropout_p = dropout_p,
+                    attention_dropout = attention_dropout,
+                    activation_dropout = activation_dropout,
                     parallel_ffn = parallel_ffn,
                 )
             )
@@ -162,6 +168,8 @@ class Decoder(torch.nn.Module):
         post_layer_norm (bool, optional): whether to use post-layernorm. Defaults to False, which means pre-layernorm.
         attn_scale (bool, optional): attn_scale used in in :py:class:`model_center.layer.Attention`. Defaults to False.
         dropout_p (float, optional): Defaults to 0.
+        attention_dropout (float, optional) : Dropout inside self_attn layer. Defaults to 0.
+        activation_dropout (float, optional): Dropout between fc1 and fc2. Defaults to 0.
     """
     def __init__(self, 
             num_layers : int,
@@ -186,7 +194,10 @@ class Decoder(torch.nn.Module):
             length_scale : bool = False,
             attn_scale : bool = False,
             dropout_p : float = 0,
+            attention_dropout : float = 0,
+            activation_dropout : float = 0,
             parallel_ffn : bool = False,
+            post_layer_norm : bool = False,
         ):
 
         super().__init__()
@@ -218,7 +229,10 @@ class Decoder(torch.nn.Module):
                     length_scale = length_scale,
                     attn_scale = attn_scale,
                     dropout_p = dropout_p,
+                    attention_dropout = attention_dropout,
+                    activation_dropout = activation_dropout,
                     parallel_ffn = parallel_ffn,
+                    post_layer_norm = post_layer_norm,
                 )
             )
             for _ in range(num_layers)

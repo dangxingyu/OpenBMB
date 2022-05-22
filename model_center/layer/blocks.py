@@ -41,6 +41,7 @@ class SelfAttentionBlock(torch.nn.Module):
         post_layer_norm (bool, optional): whether to use post-layernorm. Defaults to False, which means pre-layernorm.
         attn_scale (bool, optional): attn_scale used in in :py:class:`model_center.layer.Attention`. Defaults to False.
         dropout_p (float, optional): Defaults to 0.
+        attention_dropout (float, optional) : Dropout inside self_attn layer. Defaults to 0.
     """
 
     def __init__(self, 
@@ -61,6 +62,7 @@ class SelfAttentionBlock(torch.nn.Module):
                  length_scale : bool = False,
                  attn_scale : bool = False,
                  dropout_p : float = 0,
+                 attention_dropout : float = 0,
                 ):
 
         super().__init__()
@@ -87,7 +89,7 @@ class SelfAttentionBlock(torch.nn.Module):
             pos_bias_type = pos_bias_type,
             length_scale = length_scale,
             attn_scale = attn_scale,
-            dropout_p = dropout_p,
+            dropout_p = attention_dropout,
         )
 
         if dropout_p:
@@ -112,13 +114,20 @@ class SelfAttentionBlock(torch.nn.Module):
             :obj:`torch.Tensor` of shape ``(batch, seq_self, dim_model)``: The output of attention block.
 
         """    
+    
         x = self.layernorm_before_attention(hidden_states)
+
         if self.post_layer_norm:
             hidden_states = x
         x = self.self_attention(x, x, attention_mask, position_bias)
+        
+        # print("debug my hidden after self-attn:", x)
+
         if self.dropout is not None:
             x = self.dropout(x)
         hidden_states = hidden_states + x
+
+        # print("post_layer_norm", self.post_layer_norm)
         return hidden_states
 
 
@@ -141,6 +150,7 @@ class CrossAttentionBlock(torch.nn.Module):
         post_layer_norm (bool, optional): whether to use post-layernorm. Defaults to False, which means pre-layernorm.
         attn_scale (bool, optional): attn_scale used in in :py:class:`model_center.layer.Attention`. Defaults to False.
         dropout_p (float, optional): Defaults to 0.
+        attention_dropout (float, optional) : Dropout inside self_attn layer. Defaults to 0.
     """
 
     def __init__(self, 
@@ -161,6 +171,7 @@ class CrossAttentionBlock(torch.nn.Module):
                  length_scale : bool = False,
                  attn_scale : bool = False,
                  dropout_p : float = 0,
+                 attention_dropout : float = 0,
                 ):
 
         super().__init__()
@@ -187,7 +198,7 @@ class CrossAttentionBlock(torch.nn.Module):
             pos_bias_type = pos_bias_type,
             length_scale = length_scale,
             attn_scale = attn_scale,
-            dropout_p = dropout_p,
+            dropout_p = attention_dropout,
         )
 
         if dropout_p:
@@ -240,6 +251,7 @@ class FFNBlock(torch.nn.Module):
         ffn_activate_fn (str, optional): activate_fn used in :py:class:`model_center.layer.FeedForward`. Defaults to "gated_gelu".
         post_layer_norm (bool, optional): whether to use post-layernorm. Defaults to False, which means pre-layernorm.
         dropout_p (float, optional): Defaults to 0.
+        activation_dropout (float, optional): Dropout between fc1 and fc2. Defaults to 0.
     """
 
     def __init__(self, 
@@ -257,6 +269,7 @@ class FFNBlock(torch.nn.Module):
                  post_layer_norm : bool = False,
                  length_scale : bool = False,
                  dropout_p : float = 0,
+                 activation_dropout : float = 0,
                 ):
         super().__init__()
 
@@ -279,6 +292,7 @@ class FFNBlock(torch.nn.Module):
             bias = ffn_bias,
             activate_fn = ffn_activate_fn,
             length_scale = length_scale,
+            dropout_p=activation_dropout
         )
 
         if dropout_p:
@@ -334,6 +348,8 @@ class TransformerBlock(torch.nn.Module):
         post_layer_norm (bool, optional): whether to use post-layernorm. Defaults to False, which means pre-layernorm.
         attn_scale (bool, optional): attn_scale used in in :py:class:`model_center.layer.Attention`. Defaults to False.
         dropout_p (float, optional): Defaults to 0.
+        attention_dropout (float, optional) : Dropout inside self_attn layer. Defaults to 0.
+        activation_dropout (float, optional): Dropout between fc1 and fc2. Defaults to 0.
     """
 
     def __init__(self, 
@@ -361,6 +377,8 @@ class TransformerBlock(torch.nn.Module):
                  length_scale : bool = False,
                  attn_scale : bool = False,
                  dropout_p : float = 0,
+                 attention_dropout : float = 0,
+                 activation_dropout : float = 0,
                 ):
         super().__init__()
 
@@ -384,6 +402,7 @@ class TransformerBlock(torch.nn.Module):
             length_scale = length_scale,
             attn_scale = attn_scale,
             dropout_p = dropout_p,
+            attention_dropout = attention_dropout,
         )
 
         if is_decoder:
@@ -404,6 +423,7 @@ class TransformerBlock(torch.nn.Module):
                 length_scale = length_scale,
                 attn_scale = attn_scale,
                 dropout_p = dropout_p,
+                attention_dropout = attention_dropout,
             )
         else:
             self.cross_att = None
@@ -423,6 +443,7 @@ class TransformerBlock(torch.nn.Module):
             length_scale = length_scale,
             dropout_p = dropout_p,
             post_layer_norm = post_layer_norm,
+            activation_dropout = activation_dropout,
         )
 
         self.parallel_ffn = parallel_ffn
@@ -449,13 +470,16 @@ class TransformerBlock(torch.nn.Module):
 
         """
         # (batch, dim_model, seq_self)
+
+        # print("my hidden states at start of transformer : ", self_hidden_states)
+        
         hidden_states = self.self_att(self_hidden_states,
                                       attention_mask = self_attention_mask,
                                       position_bias = self_position_bias)
 
         # (batch, dim_model, seq_self)
         if self.is_decoder and self.cross_att is not None:
-            hidden_states = self.cross_att(hidden_states = hidden_states,
+            idden_states = self.cross_att(hidden_states = hidden_states,
                                            key_value_states = cross_hidden_states,
                                            attention_mask = cross_attention_mask,
                                            position_bias = cross_position_bias)

@@ -109,6 +109,8 @@ class Bert(BaseModel):
             length_scale = config.length_scale,
             attn_scale = config.attn_scale,
             dropout_p = config.dropout_p,
+            activation_dropout = config.activation_dropout,
+            attention_dropout = config.attention_dropout,
             post_layer_norm = config.post_layer_norm,
         )
 

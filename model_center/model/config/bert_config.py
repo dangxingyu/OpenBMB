@@ -36,6 +36,8 @@ class BertConfig(Config):
                        dim_ff=3072,
                        num_layers=12,
                        dropout_p=0.1,
+                       activation_dropout=0.1,
+                       attention_dropout=0.1,
                        emb_init_mean = 0.0,
                        emb_init_std = 1,
                        pos_bias_type = "none",
@@ -75,6 +77,8 @@ class BertConfig(Config):
         self.dim_ff = dim_ff
         self.num_layers = num_layers
         self.dropout_p = dropout_p
+        self.activation_dropout = activation_dropout
+        self.attention_dropout = attention_dropout
         self.emb_init_mean = emb_init_mean
         self.emb_init_std = emb_init_std
         self.pos_bias_type = pos_bias_type

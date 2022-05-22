@@ -316,4 +316,4 @@ The package is released under the [Apache 2.0](https://github.com/OpenBMB/ModelC
 
 [^6]: [GPT2: Language Models are Unsupervised Multitask Learners.](http://www.persagen.com/files/misc/radford2019language.pdf) Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, and Ilya Sutskever.
 
-[^7]: [GPT-J](https://github.com/kingoflolz/mesh-transformer-jax) (from EleutherAI) released in the repo [mesh-transformer-jax](https://github.com/kingoflolz/mesh-transformer-jax) by Ben Wang and Aran Komatsuzaki.
+[^7]: [GPT-J](https://github.com/kingoflolz/mesh-transformer-jax) (from EleutherAI) released in the repo [mesh-transformer-jax](https://github.com/kingoflolz/mesh-transformer-jax) by Ben Wang and Aran Komatsuzaki.# OpenBMB
